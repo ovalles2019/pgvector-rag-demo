@@ -1,0 +1,14 @@
+PostgreSQL and pgvector Overview
+
+PostgreSQL is an open-source relational database known for reliability, extensibility, and strong SQL support. The pgvector extension adds native vector similarity search to PostgreSQL, making it a practical choice for retrieval-augmented generation (RAG) systems.
+
+With pgvector, you can store embedding vectors alongside structured metadata such as document titles, source paths, and timestamps. Similarity search uses distance operators like cosine distance (<=>), allowing applications to find the most relevant text chunks for a user question.
+
+A typical RAG architecture includes three stages:
+1. Ingestion: load documents, split them into chunks, and generate embeddings.
+2. Storage: persist chunks and vectors in PostgreSQL with pgvector indexes.
+3. Retrieval: embed the query, search for nearest neighbors, and optionally pass results to an LLM.
+
+IVFFlat indexes trade a small amount of recall for faster approximate nearest-neighbor search. For demos and moderate datasets, this is usually sufficient. HNSW indexes are also available in newer pgvector versions for higher recall at larger scale.
+
+When designing a schema, keep chunks small enough to fit in an LLM context window but large enough to preserve meaning. Overlap between chunks helps avoid cutting sentences in half.

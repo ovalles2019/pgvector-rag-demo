@@ -1,0 +1,19 @@
+Retrieval-Augmented Generation (RAG)
+
+Retrieval-Augmented Generation combines information retrieval with large language model generation. Instead of relying only on the model's training data, RAG fetches relevant documents at query time and grounds the answer in that context.
+
+The main benefit is reduced hallucination. When the model receives explicit source text, it can cite facts more reliably and say "I don't know" when context is missing.
+
+Common RAG pipeline steps:
+- Document loading from files, APIs, or databases
+- Chunking long documents into smaller passages
+- Embedding each chunk into a dense vector representation
+- Storing vectors in a vector database such as PostgreSQL with pgvector
+- At query time, embedding the user question and retrieving top-k similar chunks
+- Prompting an LLM with the retrieved context to produce a final answer
+
+Chunk size and overlap are important hyperparameters. Smaller chunks improve precision for specific facts, while larger chunks preserve broader context. Overlap reduces the risk of splitting related sentences across chunk boundaries.
+
+Evaluation matters. Track retrieval quality with metrics like recall@k and inspect failure cases where the wrong passages are returned. Even strong LLMs cannot answer well if retrieval misses the relevant content.
+
+For production systems, add metadata filters (tenant ID, product line, date range) and refresh embeddings when source documents change.

@@ -1,0 +1,17 @@
+Sentence Transformers and Embeddings
+
+Sentence Transformers is a Python library for generating semantic embeddings from text. Models such as all-MiniLM-L6-v2 produce 384-dimensional vectors that capture meaning rather than exact keyword overlap.
+
+Embeddings enable semantic search. Two sentences with different wording but similar intent can appear close together in vector space. For example, "How do I reset my password?" and "Forgot login credentials" may retrieve the same support article.
+
+Best practices for embedding pipelines:
+- Normalize embeddings when using cosine similarity
+- Batch encode documents for faster ingestion
+- Keep the same model for both indexing and querying
+- Version your embedding model and re-index when upgrading
+
+MiniLM models are lightweight and work well for demos, prototypes, and many production workloads. Larger models can improve retrieval quality but increase latency and storage requirements.
+
+In this demo, embeddings are generated locally with sentence-transformers, so no external API key is required for ingestion or retrieval. Optional OpenAI generation can be enabled separately for answer synthesis.
+
+Storage cost scales with the number of chunks and embedding dimension. A few thousand chunks at 384 dimensions is inexpensive on PostgreSQL, especially compared with dedicated vector-only services for small to medium workloads.
