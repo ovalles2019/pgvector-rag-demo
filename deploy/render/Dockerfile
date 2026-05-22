@@ -8,13 +8,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+ENV HF_HOME=/app/.cache/huggingface \
+    TRANSFORMERS_CACHE=/app/.cache/huggingface \
+    TORCH_HOME=/app/.cache/torch
+
 COPY requirements.txt .
-RUN pip3 install --break-system-packages --no-cache-dir -r requirements.txt \
+# CPU-only PyTorch keeps the image smaller and fits Render free tier RAM
+RUN pip3 install --break-system-packages --no-cache-dir \
+    torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip3 install --break-system-packages --no-cache-dir -r requirements.txt \
     && python3 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
 COPY . .
+COPY deploy/render/docker-entrypoint-initdb.d/ /docker-entrypoint-initdb.d/
 COPY deploy/render/start.sh /usr/local/bin/start-demo.sh
-RUN chmod +x /usr/local/bin/start-demo.sh
+RUN chmod +x /usr/local/bin/start-demo.sh /docker-entrypoint-initdb.d/*.sh 2>/dev/null || true \
+    && chown -R postgres:postgres /app/.cache /var/lib/postgresql/data
 
 ENV POSTGRES_USER=rag \
     POSTGRES_PASSWORD=ragpassword \
