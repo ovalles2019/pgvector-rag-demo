@@ -22,13 +22,13 @@ RUN pip3 install --break-system-packages --no-cache-dir \
 COPY . .
 COPY deploy/render/docker-entrypoint-initdb.d/ /docker-entrypoint-initdb.d/
 COPY deploy/render/start.sh /usr/local/bin/start-demo.sh
-RUN chmod +x /usr/local/bin/start-demo.sh /docker-entrypoint-initdb.d/*.sh 2>/dev/null || true \
+RUN chmod +x /usr/local/bin/start-demo.sh \
     && chown -R postgres:postgres /app/.cache /var/lib/postgresql/data
 
 ENV POSTGRES_USER=rag \
     POSTGRES_PASSWORD=ragpassword \
     POSTGRES_DB=ragdb \
-    DATABASE_URL=postgresql://rag:ragpassword@127.0.0.1:5432/ragdb \
+    DATABASE_URL=postgresql://rag:ragpassword@/ragdb?host=/var/run/postgresql \
     PGVECTOR_RAG_DEMO=1 \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
     STREAMLIT_SERVER_HEADLESS=true
