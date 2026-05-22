@@ -1,0 +1,12 @@
+# Portfolio demo — connect repo → New Blueprint on Render
+services:
+  - type: web
+    name: pgvector-rag-demo
+    runtime: docker
+    dockerfilePath: ./deploy/render/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: PGVECTOR_RAG_DEMO
+        value: "1"

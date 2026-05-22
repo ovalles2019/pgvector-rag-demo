@@ -1,5 +1,7 @@
 # pgvector RAG Demo
 
+[![Live demo](https://img.shields.io/badge/demo-live-7c3aed?style=flat-square)](https://pgvector-rag-demo.onrender.com/)
+
 A Retrieval-Augmented Generation (RAG) demo using **PostgreSQL + pgvector** for vector search, **sentence-transformers** for local embeddings, and a **Streamlit UI** for chat-based Q&A.
 
 ## What it does
@@ -59,6 +61,16 @@ streamlit run app.py
 ```
 
 Open [http://localhost:8501](http://localhost:8501).
+
+## Live demo (portfolio)
+
+Full stack on one URL: **Postgres + pgvector + Streamlit** with sample docs pre-ingested:
+
+**[pgvector-rag-demo.onrender.com](https://pgvector-rag-demo.onrender.com/)**
+
+Deploy via Render Blueprint (`render.yaml`). First boot ingests `data/sample_docs` and loads the embedding model (~1–2 min on free tier). Health: `GET /_stcore/health`.
+
+Retrieval works without an API key. Set `OPENAI_API_KEY` on Render only if you want LLM-generated answers in the UI.
 
 ## CLI commands
 
