@@ -15,6 +15,11 @@ def connect(settings: Settings) -> psycopg.Connection:
 
 
 def init_schema(conn: psycopg.Connection, dimension: int) -> None:
+    # pgvector column size must be a literal in DDL; parameters are not allowed.
+    dim = int(dimension)
+    if dim <= 0 or dim > 16_000:
+        raise ValueError(f"invalid embedding dimension: {dimension}")
+
     with conn.cursor() as cur:
         cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
         cur.execute(
@@ -30,17 +35,16 @@ def init_schema(conn: psycopg.Connection, dimension: int) -> None:
             """
         )
         cur.execute(
-            """
+            f"""
             CREATE TABLE IF NOT EXISTS chunks (
                 id SERIAL PRIMARY KEY,
                 document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
                 chunk_index INTEGER NOT NULL,
                 content TEXT NOT NULL,
-                embedding vector(%s) NOT NULL,
+                embedding vector({dim}) NOT NULL,
                 UNIQUE (document_id, chunk_index)
             )
-            """,
-            (dimension,),
+            """
         )
         cur.execute(
             "ALTER TABLE documents ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'general'"
