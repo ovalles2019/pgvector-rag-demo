@@ -6,7 +6,7 @@ import os
 
 import streamlit as st
 
-from src.config import get_settings
+from src.config import Settings, get_settings
 from src.db import connect, get_stats, init_schema
 from src.ingest import ingest_bytes, ingest_path
 from src.loaders import SUPPORTED_EXTENSIONS
@@ -21,30 +21,6 @@ DEMO_QUESTIONS = [
     "Explain cosine similarity search",
 ]
 
-st.set_page_config(
-    page_title="pgvector RAG Demo",
-    page_icon="🔍",
-    layout="wide",
-    initial_sidebar_state="collapsed" if IS_DEMO else "expanded",
-)
-
-st.markdown(
-    """
-    <style>
-    .block-container { padding-top: 1.5rem; max-width: 920px; }
-    h1 { font-weight: 700; letter-spacing: -0.03em; }
-    .demo-pill {
-        display: inline-block; margin-bottom: 1rem; padding: 0.35rem 0.75rem;
-        border-radius: 999px; font-size: 0.8rem; font-weight: 600;
-        background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd;
-    }
-    .hint { color: #64748b; font-size: 0.92rem; margin-bottom: 1.25rem; }
-    div[data-testid="stChatMessage"] { border-radius: 12px; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
 SUPPORTED_UPLOAD_TYPES = sorted(SUPPORTED_EXTENSIONS)
 
 
@@ -53,15 +29,74 @@ def init_session_state() -> None:
         st.session_state.messages = []
 
 
-def render_sidebar(settings) -> tuple[str | None, int, bool]:
+@st.cache_data(ttl=30, show_spinner=False)
+def load_db_snapshot(database_url: str, dimension: int) -> dict:
+    settings = get_settings()
+    with connect(settings) as conn:
+        init_schema(conn, settings.embedding_dimension)
+        stats = get_stats(conn)
+        categories = get_available_categories(settings)
+    return {"stats": stats, "categories": categories}
+
+
+def apply_demo_theme() -> None:
+    st.markdown(
+        """
+        <style>
+        /* Hide empty collapsed sidebar on the public demo */
+        section[data-testid="stSidebar"] { display: none !important; }
+        button[data-testid="stSidebarCollapsedControl"] { display: none !important; }
+        header[data-testid="stHeader"] { background: rgba(255,255,255,0.92); }
+        footer { visibility: hidden; }
+        #MainMenu { visibility: hidden; }
+        section.main > div.block-container {
+            max-width: 44rem;
+            padding-top: 1.25rem;
+            padding-bottom: 7rem;
+        }
+        .demo-pill {
+            display: inline-block;
+            margin: 0 0 0.75rem 0;
+            padding: 0.3rem 0.7rem;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            background: #ede9fe;
+            color: #5b21b6;
+            border: 1px solid #c4b5fd;
+        }
+        .demo-subtitle { color: #64748b; font-size: 1rem; line-height: 1.5; margin-bottom: 0; }
+        div[data-testid="stChatMessage"] { border-radius: 12px; }
+        [data-testid="stBottomBlockContainer"] {
+            padding-bottom: 0.75rem;
+            background: linear-gradient(transparent, #ffffff 28%);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def apply_local_theme() -> None:
+    st.markdown(
+        """
+        <style>
+        section.main > div.block-container { max-width: 52rem; padding-bottom: 6rem; }
+        div[data-testid="stChatMessage"] { border-radius: 12px; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_sidebar(settings: Settings) -> tuple[str | None, int, bool]:
     with st.sidebar:
         st.markdown("### Settings")
 
         try:
-            with connect(settings) as conn:
-                init_schema(conn, settings.embedding_dimension)
-                stats = get_stats(conn)
-                categories = get_available_categories(settings)
+            snapshot = load_db_snapshot(settings.database_url, settings.embedding_dimension)
+            stats = snapshot["stats"]
+            categories = snapshot["categories"]
         except Exception as exc:
             st.error(f"Database unavailable: {exc}")
             return None, settings.top_k, False
@@ -82,40 +117,68 @@ def render_sidebar(settings) -> tuple[str | None, int, bool]:
             help="Optional — retrieval works without an API key.",
         )
 
-        if not IS_DEMO:
-            st.divider()
-            st.caption("Ingest more documents")
-            upload_category = st.text_input("Category", value="general")
-            uploaded = st.file_uploader(
-                "Upload files",
-                type=[ext.lstrip(".") for ext in SUPPORTED_UPLOAD_TYPES],
-                accept_multiple_files=True,
-            )
-            if st.button("Ingest uploads", use_container_width=True) and uploaded:
-                with st.spinner("Ingesting…"):
-                    total = 0
-                    for f in uploaded:
-                        total += ingest_bytes(
-                            settings,
-                            filename=f.name,
-                            content=f.getvalue(),
-                            category=upload_category.strip() or "general",
-                        )
-                st.success(f"Ingested {total} chunks.")
-                st.rerun()
+        st.divider()
+        st.caption("Ingest more documents")
+        upload_category = st.text_input("Category", value="general")
+        uploaded = st.file_uploader(
+            "Upload files",
+            type=[ext.lstrip(".") for ext in SUPPORTED_UPLOAD_TYPES],
+            accept_multiple_files=True,
+        )
+        if st.button("Ingest uploads", use_container_width=True) and uploaded:
+            with st.spinner("Ingesting…"):
+                total = 0
+                for f in uploaded:
+                    total += ingest_bytes(
+                        settings,
+                        filename=f.name,
+                        content=f.getvalue(),
+                        category=upload_category.strip() or "general",
+                    )
+            st.success(f"Ingested {total} chunks.")
+            load_db_snapshot.clear()
+            st.rerun()
 
-            local_path = st.text_input("Local path", value="data/sample_docs")
-            if st.button("Ingest path", use_container_width=True):
-                with st.spinner("Ingesting…"):
-                    count = ingest_path(settings, local_path, category="general")
-                st.success(f"Ingested {count} chunks.")
-                st.rerun()
+        local_path = st.text_input("Local path", value="data/sample_docs")
+        if st.button("Ingest path", use_container_width=True):
+            with st.spinner("Ingesting…"):
+                count = ingest_path(settings, local_path, category="general")
+            st.success(f"Ingested {count} chunks.")
+            load_db_snapshot.clear()
+            st.rerun()
 
         if st.button("Clear chat", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
 
     return category_filter, top_k, generate_answers
+
+
+def render_demo_controls(
+    settings: Settings,
+) -> tuple[str | None, int, bool, str | None]:
+    try:
+        snapshot = load_db_snapshot(settings.database_url, settings.embedding_dimension)
+        stats = snapshot["stats"]
+    except Exception as exc:
+        st.error(f"Database unavailable: {exc}")
+        st.stop()
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Documents", stats["documents"])
+    m2.metric("Chunks", stats["chunks"])
+    m3.metric("Mode", "Retrieval")
+
+    st.caption("Sample questions — click one or type below.")
+    picked: str | None = None
+    row1 = st.columns(2)
+    row2 = st.columns(2)
+    for i, question in enumerate(DEMO_QUESTIONS):
+        col = row1[i % 2] if i < 2 else row2[i % 2]
+        if col.button(question, key=f"demo-q-{i}", use_container_width=True):
+            picked = question
+
+    return None, min(settings.top_k, 4), False, picked
 
 
 def render_sources(chunks) -> None:
@@ -128,7 +191,7 @@ def render_sources(chunks) -> None:
 
 
 def run_query(
-    settings,
+    settings: Settings,
     prompt: str,
     category_filter: str | None,
     top_k: int,
@@ -155,32 +218,13 @@ def run_query(
     return answer, chunks
 
 
-def main() -> None:
-    init_session_state()
-    settings = get_settings()
-
-    if IS_DEMO:
-        st.markdown('<span class="demo-pill">Portfolio demo · PostgreSQL + pgvector</span>', unsafe_allow_html=True)
-
-    st.title("Ask your documents")
-    st.markdown(
-        '<p class="hint">RAG over sample docs with <strong>pgvector</strong> semantic search '
-        "and local <strong>sentence-transformers</strong> embeddings.</p>",
-        unsafe_allow_html=True,
-    )
-
-    category_filter, top_k, generate_answers = render_sidebar(settings)
-
-    if IS_DEMO and not st.session_state.messages:
-        st.caption("Try a sample question:")
-        cols = st.columns(2)
-        for i, q in enumerate(DEMO_QUESTIONS):
-            if cols[i % 2].button(q, key=f"demo-q-{i}", use_container_width=True):
-                st.session_state["_pending_prompt"] = q
-                st.rerun()
-
-    pending = st.session_state.pop("_pending_prompt", None)
-
+def render_chat(
+    settings: Settings,
+    category_filter: str | None,
+    top_k: int,
+    generate_answers: bool,
+    pending: str | None = None,
+) -> None:
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -211,6 +255,50 @@ def main() -> None:
     st.session_state.messages.append(
         {"role": "assistant", "content": answer, "chunks": chunks}
     )
+
+
+def main() -> None:
+    st.set_page_config(
+        page_title="pgvector RAG Demo",
+        page_icon="🔍",
+        layout="centered" if IS_DEMO else "wide",
+        initial_sidebar_state="collapsed" if IS_DEMO else "expanded",
+    )
+    init_session_state()
+    settings = get_settings()
+
+    if IS_DEMO:
+        apply_demo_theme()
+    else:
+        apply_local_theme()
+
+    pending_from_button: str | None = None
+
+    if IS_DEMO:
+        st.markdown(
+            '<span class="demo-pill">Portfolio demo · PostgreSQL + pgvector</span>',
+            unsafe_allow_html=True,
+        )
+        st.title("Ask your documents")
+        st.markdown(
+            '<p class="demo-subtitle">Semantic search over sample docs using '
+            "<strong>pgvector</strong> and local <strong>sentence-transformers</strong> "
+            "embeddings.</p>",
+            unsafe_allow_html=True,
+        )
+        st.divider()
+        category_filter, top_k, generate_answers, pending_from_button = render_demo_controls(
+            settings
+        )
+    else:
+        st.title("Ask your documents")
+        st.caption(
+            "RAG over your documents with pgvector semantic search and sentence-transformers."
+        )
+        category_filter, top_k, generate_answers = render_sidebar(settings)
+
+    pending = pending_from_button or st.session_state.pop("_pending_prompt", None)
+    render_chat(settings, category_filter, top_k, generate_answers, pending=pending)
 
 
 if __name__ == "__main__":
